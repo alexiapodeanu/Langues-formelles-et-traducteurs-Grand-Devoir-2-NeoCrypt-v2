@@ -1,0 +1,141 @@
+GHID PREZENTARE — teste + cod (NeoCrypt v2)
+============================================
+
+PARTEA 1 — DE CE FIECARE TEST AFISEAZA VALID SAU INVALID
+--------------------------------------------------------
+
+Cum citesti rezultatul in consola:
+  VALID   = lexer + parser au acceptat tot fisierul (respecta .g4)
+  INVALID = cel putin o regula nu e respectata; mesajul zice linia si coloana
+
+
+--- part4_test1.txt (VALID) ---
+
+Ce contine:
+  - LET global max_rounds = 3 + LEVEL(Agent_12) ;
+  - SCOPE VAULT_ALPHA BEGIN ... END
+  - GUARD ... UNLESS ... THEN bloc ELSE comanda
+  - REPEAT MIN(max_rounds, 5) TIMES comanda
+
+De ce e VALID:
+  1) LET la inceput = regula globalDecl (LET var = arithExpr ;)
+  2) Agent_12 = TARGET_ID (litera mare, _ , cifre ok)
+  3) LEVEL(Agent_12) = factor in arithExpr
+  4) SCOPE + REGION_ID + BEGIN + statement+ + END = scopeBlock
+  5) GUARD cond UNLESS cond THEN stmt ELSE stmt = guardStmt
+  6) BEND ... ; = command (GD1)
+  7) REPEAT arithExpr TIMES stmt = repeatStmt
+  8) MIN(a,b) cu virgula = factor MIN ( ... , ... )
+
+De ce NU da eroare:
+  fiecare linie se potriveste pe cate o regula din NeoCryptParser.g4
+
+
+--- part4_test2.txt (VALID) ---
+
+Ce contine:
+  - SELECT cu 2 CASE + DEFAULT + END
+  - IF cu AND si NOT (conditie compusa)
+  - LET depth = ... IN (if imbricat + CHAIN + SCAN)
+
+De ce e VALID:
+  1) SELECT caseBranch+ defaultBranch END — fiecare CASE NORTH THEN comanda
+  2) IF condition THEN ... — condition foloseste orExpr/andExpr/unaryCond
+     Ex: patrol GT 1 AND NOT 0 LT 1
+     NOT se aplica la 0 LT 1 (prioritate NOT > AND > OR)
+  3) LET depth = patrol + 1 IN statement — letStmt
+  4) CHAIN cmd LINK cmd ; — fara ; dupa prima comanda, doar la final
+  5) SCAN UNTIL depth LT 5 DO comanda — scanStmt
+
+Atentie la prezentare:
+  THEN de la IF e altceva decat LINK de la CHAIN (token-uri diferite in lexer)
+
+
+--- part4_test3.txt (VALID) ---
+
+Ce contine:
+  - MAX(LEVEL(Virus_404), 3) la LET global
+  - SCOPE in SCOPE (imbricare)
+  - REPEAT alert_level TIMES scopeBlock
+  - GUARD cu OR in conditie
+
+De ce e VALID:
+  1) REPEAT poate avea ca body un scopeBlock (nu doar o comanda)
+  2) GUARD 7 GT 5 OR 1 LT 0 — OR leaga doua comparatii (orExpr)
+  3) Doua END-uri inchid INNER_SANCTUM si DEFENSE_RING corect
+
+
+--- part5_test4.txt (VALID) ---
+
+Ce contine:
+  - comanda simpla, IF, CHAIN, REPEAT, SCAN (multe tipuri de statement)
+
+De ce e VALID:
+  1) program = globalDecl* statement+ EOF — mai multe instructiuni la acelasi nivel
+  2) sync_delay e VAR_ID folosit in IF, REPEAT, SCAN (acceptat sintactic)
+  3) CHAIN SHIFT ... LINK FREEZE ... ; — doua chainStep-uri legate cu LINK
+
+
+--- part5_test5.txt (VALID) ---
+
+Ce contine:
+  - LET rounds IN REPEAT ... SELECT ... END
+  - GUARD rounds GT baseline dupa blocul LET
+
+De ce e VALID (sintactic):
+  1) SELECT in interiorul unui block din REPEAT — statement imbricat ok
+  2) rounds in GUARD e tot VAR_ID — parserul accepta
+
+Nota pentru profesor (semantic, optional):
+  rounds e declarat in LET ... IN deci la nivel semantic ar putea fi
+  "in afara scope-ului" — dar tema GD2 cere doar validare sintactica ANTLR.
+
+
+--- part5_invalid_syntax.txt (INVALID) ---
+
+Ce contine:
+  SCOPE BROKEN_ZONE
+  BEGIN
+    BEND Agent_1 NORTH ~strong ;
+    SELECT
+      CASE SOUTH THEN SHIFT Wall_2 EAST ~weak ;
+  (fisierul se termina aici)
+
+De ce e INVALID:
+  1) selectStmt cere: SELECT caseBranch+ defaultBranch? END
+     — lipseste END dupa SELECT
+  2) scopeBlock cere: SCOPE region BEGIN statement+ END
+     — lipseste END pentru SCOPE/BEGIN
+
+Ce vei vedea in consola (aproximativ):
+  EROARE SINTACTICA [...] expecting {'END', 'CASE', 'DEFAULT'}
+  sau extraneous input '<EOF>'
+
+De ce e bine la demo:
+  arati ca parserul prinde erori reale, nu accepta orice text.
+
+
+PARTEA 2 — FISIERE GRAMMAR SI MAIN (REZUMAT FUNCTIE CU FUNCTIE)
+---------------------------------------------------------------
+
+NeoCryptLexer.g4
+  - lexer grammar = genereaza NeoCryptLexer.java
+  - fiecare linie tip "NUME : 'text' ;" = un token
+  - TARGET_ID, INTENSITY = regex (pattern)
+  - COMMENT, WS -> skip = ignorate
+  - restul = cuvinte cheie GD2
+
+NeoCryptParser.g4
+  - parser grammar = genereaza NeoCryptParser.java
+  - program = punct de start
+  - statement = alternativa intre tipuri de instructiuni
+  - condition / arithExpr = precedenta prin reguli separate (orExpr, andExpr, etc.)
+  - chainStep fara SEPARATOR = de ce CHAIN nu are ; intre comenzi
+
+NeoCryptParserMain.java
+  - SyntaxErrorListener = prinde erori si le printeaza
+  - parseFile = lexer + parser.program() + verificare erori + statistici
+  - count = parcurge arborele si numara noduri
+  - main = citeste argumentele din Run Configuration (calea catre test)
+
+Dupa modificari in .g4 rulezi build-parser.ps1 ca sa regenerezi .java
